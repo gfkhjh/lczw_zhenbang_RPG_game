@@ -32,7 +32,7 @@ export class GameManager extends Component {
      *
      * 在这里完成游戏初始化工作：
      * 1. 打印当前初始墨料和背包状态
-     * 2. 调用 simulateGameLoop() 模拟玩家操作流程
+     * 2. 等待真实的场景交互驱动游戏流程
      */
     public start(): void {
         console.log('========== 游戏初始化开始 ==========');
@@ -55,8 +55,8 @@ export class GameManager extends Component {
 
         console.log('==================================\n');
 
-        // 启动核心玩法测试流程
-        this.simulateGameLoop();
+        // 正式启动不再自动运行固定模拟流程。
+        // simulateGameLoop 仅保留为开发期手动调试入口。
     }
 
     // ======================== 测试/模拟方法 ========================

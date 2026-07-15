@@ -1,0 +1,11 @@
+{
+  "name": "lczw-zhenbang-rpg-core",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}
