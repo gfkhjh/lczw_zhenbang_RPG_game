@@ -18,24 +18,12 @@
  */
 
 import { _decorator, Component, Node, Label, Prefab, ScrollView, instantiate, Layout, SpriteFrame, resources } from 'cc';
-import { BagMode, CardQuality, CardItem, ICardData } from './CardItem';
+import { CardItem } from './CardItem';
 import { PlayerDataService } from './core/PlayerDataService';
 import { oracleCards } from './core/data';
-import type { OracleCard, CardRarity } from './core/models';
+import type { OracleCard } from './core/models';
 
 const { ccclass, property } = _decorator;
-
-// ======================== 类型映射工具函数 ========================
-
-/** 将 core models 的稀有度字符串转为 CardItem 的 CardQuality 枚举 */
-function rarityToQuality(rarity: CardRarity): CardQuality {
-    switch (rarity) {
-        case 'gold': return CardQuality.GOLD;
-        case 'red':  return CardQuality.RED;
-        case 'blue':
-        default:     return CardQuality.BLUE;
-    }
-}
 
 // ======================== 背包控制器组件 ========================
 
@@ -67,7 +55,7 @@ export class BagUI extends Component {
 
     // ======================== 运行时状态 ========================
 
-    private _currentMode: BagMode = BagMode.STUDY_MODE;
+    private _currentMode: string = 'STUDY_MODE';
     private _cardItems: CardItem[] = [];
     private _cardService: PlayerDataService | null = null;
 
@@ -121,9 +109,9 @@ export class BagUI extends Component {
      * 工作流程：
      *   1. 从 PlayerDataService 获取当前玩家拥有的卡牌 ID 列表
      *   2. 在 oracleCards 常量表中查找匹配的 OracleCard 对象
-     *   3. 将 OracleCard 转换为 CardItem 可消费的 ICardData
-     *   4. 异步加载卡牌对应的 SpriteFrame 资源
-     *   5. 清除旧的卡牌实例，重新渲染
+     *   3. 清除旧的卡牌实例
+     *   4. 直接传入 OracleCard 渲染新卡牌（CardItem 内部完成数据消费）
+     *   5. 异步加载甲骨文图片资源
      */
     public refresh(): void {
         console.log('[BagUI] 正在执行背包数据重绘...');
@@ -141,54 +129,24 @@ export class BagUI extends Component {
             console.warn('[BagUI] 以下卡牌 ID 在 oracleCards 中未找到，已跳过渲染：' + missing.join(', '));
         }
 
-        // 3. 转换为 CardItem 可渲染的数据
-        const cardDataList: ICardData[] = ownedCards.map(card => this.oracleCardToICardData(card));
-
-        // 4. 清除旧卡牌
+        // 3. 清除旧卡牌
         this.clearAllCards();
 
-        // 5. 渲染新卡牌
-        this.renderCards(cardDataList);
+        // 4. 渲染新卡牌（直接传入 OracleCard，由 CardItem 内部完成数据填充与模式显隐）
+        this.renderCards(ownedCards);
     }
 
-    // ======================== OracleCard → ICardData 转换 ========================
+    // ======================== 异步图片加载 ========================
 
     /**
-     * 将核心数据模型 OracleCard 转换为 UI 层 ICardData
+     * 异步加载卡牌甲骨文图片资源并应用到对应的 CardItem
      *
-     * 图片资源（oracleBoneSprite / evolutionSprites）无法在这里同步加载，
-     * 需要先在 Cocos Creator 中将资源放入 resources 目录，
-     * 然后通过 loadCardSprites() 异步加载。
-     *
-     * ▸ 若暂时没有图片资源，卡牌的文字信息（汉字、拼音、释义）仍然可以正常显示。
-     */
-    private oracleCardToICardData(card: OracleCard): ICardData {
-        return {
-            id: card.id,
-            character: card.modernChar,
-            pinyin: card.pronunciation,
-            quality: rarityToQuality(card.rarity),
-            oracleBoneSprite: null as any,
-            evolutionSprites: [],
-            meaning: card.originalMeaning + '。' + card.modernMeaning,
-        };
-    }
-
-    /**
-     * 异步加载卡牌图片资源并应用到对应的 CardItem
-     *
-     * 在 Cocos Creator 中，请将甲骨文图片放入 assets/resources/oracle/ 目录下，
-     * 例如 oracle/day.png → resources.load('oracle/day', SpriteFrame)。
-     *
-     * 此方法会在加载完成后自动更新 CardItem 上的 Sprite 显示。
-     *
-     * @param cardItem  - 目标 CardItem 实例
-     * @param card      - 包含 oracleImagePath 的 OracleCard 数据
+     * @param cardItem - 目标 CardItem 实例
+     * @param card     - 包含 oracleImagePath 的 OracleCard 数据
      */
     private loadCardSprites(cardItem: CardItem, card: OracleCard): void {
-        const { oracleImagePath, evolutionImagePaths } = card;
+        const { oracleImagePath } = card;
 
-        // 加载甲骨文原图
         if (oracleImagePath) {
             const pathWithoutExt = oracleImagePath.replace(/\.\w+$/, '');
             resources.load(pathWithoutExt + '/spriteFrame', SpriteFrame, (err: Error | null, spriteFrame: SpriteFrame) => {
@@ -199,48 +157,31 @@ export class BagUI extends Component {
                 cardItem.setOracleSprite(spriteFrame);
             });
         }
-
-        // 加载字形演变图序列
-        if (evolutionImagePaths && evolutionImagePaths.length > 0) {
-            for (const evoPath of evolutionImagePaths) {
-                const evoPathClean = evoPath.replace(/\.\w+$/, '');
-                resources.load(evoPathClean + '/spriteFrame', SpriteFrame, (err: Error | null, spriteFrame: SpriteFrame) => {
-                    if (err) {
-                        console.warn('[BagUI] 演变图片加载失败：' + evoPath, err);
-                        return;
-                    }
-                    cardItem.addEvolutionSprite(spriteFrame);
-                });
-            }
-        }
     }
 
     // ======================== 数据构建与渲染 ========================
 
-    private renderCards(dataList: ICardData[]): void {
+    private renderCards(cards: OracleCard[]): void {
         if (!this.cardPrefab || !this.contentNode) {
             console.error('[BagUI] cardPrefab 或 contentNode 未赋值，无法渲染卡牌');
             return;
         }
 
-        for (let i = 0; i < dataList.length; i++) {
-            const data: ICardData = dataList[i];
+        for (let i = 0; i < cards.length; i++) {
+            const card: OracleCard = cards[i];
             const cardNode: Node = instantiate(this.cardPrefab);
-            cardNode.name = 'Card_' + data.character;
+            cardNode.name = 'Card_' + card.modernChar;
 
             let cardItem: CardItem | null = cardNode.getComponent(CardItem);
             if (!cardItem) {
                 cardItem = cardNode.addComponent(CardItem);
             }
 
-            cardItem.init(data, this._currentMode);
+            cardItem.init(card.id, card, this._currentMode);
             this._cardItems.push(cardItem);
 
             // 触发异步图片加载
-            const sourceCard = oracleCards.find(c => c.id === data.id);
-            if (sourceCard) {
-                this.loadCardSprites(cardItem, sourceCard);
-            }
+            this.loadCardSprites(cardItem, card);
 
             cardNode.parent = this.contentNode;
         }
@@ -253,7 +194,7 @@ export class BagUI extends Component {
             this.scrollView.scrollToTop(0.3, true);
         }
 
-        console.log('[BagUI] 共渲染 ' + dataList.length + ' 张卡牌');
+        console.log('[BagUI] 共渲染 ' + cards.length + ' 张卡牌');
     }
 
     private clearAllCards(): void {
@@ -279,19 +220,15 @@ export class BagUI extends Component {
     }
 
     private switchToStudyMode(): void {
-        if (this._currentMode === BagMode.STUDY_MODE) {
-            return;
-        }
-        this._currentMode = BagMode.STUDY_MODE;
+        if (this._currentMode === 'STUDY_MODE') return;
+        this._currentMode = 'STUDY_MODE';
         this.applyModeToAllCards();
         this.updateModeLabel();
     }
 
     private switchToExamMode(): void {
-        if (this._currentMode === BagMode.EXAM_MODE) {
-            return;
-        }
-        this._currentMode = BagMode.EXAM_MODE;
+        if (this._currentMode === 'EXAM_MODE') return;
+        this._currentMode = 'EXAM_MODE';
         this.applyModeToAllCards();
         this.updateModeLabel();
     }
@@ -303,14 +240,12 @@ export class BagUI extends Component {
     }
 
     private updateModeLabel(): void {
-        if (!this.modeLabel) {
-            return;
-        }
+        if (!this.modeLabel) return;
         switch (this._currentMode) {
-            case BagMode.STUDY_MODE:
+            case 'STUDY_MODE':
                 this.modeLabel.string = '图鉴学习模式';
                 break;
-            case BagMode.EXAM_MODE:
+            case 'EXAM_MODE':
                 this.modeLabel.string = '占卜答题模式';
                 break;
             default:

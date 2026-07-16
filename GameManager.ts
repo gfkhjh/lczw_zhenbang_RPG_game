@@ -5,7 +5,7 @@
  * - 游戏初始化与数据校验
  * - 驱动核心玩法测试流程（模拟玩家操作）
  *
- * 通过 BagUI 暴露的 PlayerDataService 访问新核心数据层。
+ * 在 start 中先创建 PlayerDataService，注入 BagUI 后再进行后续操作。
  */
 
 import { _decorator, Component, CCInteger, CCBoolean } from 'cc';
@@ -29,15 +29,27 @@ export class GameManager extends Component {
     @property({ type: BagUI, displayName: '背包界面组件' })
     public bagUI: BagUI = null;
 
+    // ========================== 运行时服务引用 ==========================
+
+    private _service: PlayerDataService | null = null;
+
     // ========================== 生命周期方法 ==========================
 
     public start(): void {
         console.log('========== 游戏初始化开始 ==========');
 
-        // 获取共享的 PlayerDataService 实例（由 BagUI 懒初始化）
-        const service: PlayerDataService = this.bagUI.cardService;
-        const profile = service.profile;
+        // 1. 创建 PlayerDataService 实例（首次启动自动创建默认存档）
+        const service = PlayerDataService.load(new CocosSaveStorage());
+        this._service = service;
 
+        // 2. 将服务注入 BagUI（必须在任何 refresh / cardService 调用之前）
+        this.bagUI.setCardService(service);
+
+        // 3. 注入完成后，BagUI 内部 start() 中的守卫会正常通过，
+        //    并且后续调用 cardService getter 不再抛错
+        console.log('[GameManager] PlayerDataService 已注入 BagUI');
+
+        const profile = service.profile;
         console.log('[GameManager] 初始墨料: ' + profile.ink);
         if (profile.ownedCardIds.length === 0) {
             console.log('[GameManager] 初始已拥有卡牌: 空');
@@ -46,7 +58,7 @@ export class GameManager extends Component {
         }
         console.log('====================================\n');
 
-        // 调试模式：自动运行模拟流程并刷新背包 UI（发布时关闭 debugSimulate 即可）
+        // 4. 调试模式：自动运行模拟流程并刷新背包 UI（发布时关闭 debugSimulate 即可）
         if (this.debugSimulate) {
             this.simulateGameLoop();
 
@@ -58,15 +70,12 @@ export class GameManager extends Component {
     /**
      * simulateGameLoop —— 模拟核心玩法流程
      *
-     * 使用新的 PlayerDataService API：
-     *   - spendInk()   → 消耗墨料
-     *   - addCard()    → 将卡牌 ID 加入背包
-     *   - answer()     → 模拟答题（自动处理奖励 / 错题记录）
+     * 使用 this.bagUI.cardService 或 this._service 访问 PlayerDataService。
      */
     public simulateGameLoop(): void {
         console.log('<><><><><> 核心玩法模拟测试开始 <><><><><>\n');
 
-        const service: PlayerDataService = this.bagUI.cardService;
+        const service = this.bagUI.cardService;
 
         // ----------------------------------------
         // 步骤 A: 消耗墨料探索
