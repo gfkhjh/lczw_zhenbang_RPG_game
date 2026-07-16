@@ -4,7 +4,14 @@
 
 ## 当前阶段
 
-仓库目前包含不依赖 Cocos Creator 的纯 TypeScript 核心数据层，以及早期 Cocos 组件原型。Cocos Creator 的具体版本尚未确定，因此本阶段不提交场景、Prefab 或引擎版本相关配置。
+仓库目前包含不依赖 Cocos Creator 的纯 TypeScript 核心数据层，以及早期 Cocos 组件原型。项目统一使用 Cocos Creator 3.8.8；场景、Prefab 和资源文件不得使用其他引擎版本保存。
+
+## 开发环境
+
+- 引擎：Cocos Creator 3.8.8
+- 语言：TypeScript
+- 目标平台：Android 学习机
+- 屏幕方向：横屏
 
 ## 核心规则
 
