@@ -5,9 +5,10 @@
  * - 从 core/PlayerDataService 获取玩家已拥有的甲骨文卡牌 ID
  * - 从 core/data 的 oracleCards 常量表中查找完整的卡牌数据
  * - 通过 ScrollView 动态生成 CardItem 实例并渲染
- * - 提供图鉴学习 / 占卜答题两种模式的切换并将模式变更同步给所有卡牌子项
+ * - 提供图鉴学习 / 占卜答题两种模式的切换
+ * - 在答题模式下维护选中卡牌列表，供外部系统查询
  *
- * ▸ 需在 Cocos Creator 属性面板绑定的组件：
+ * ◸ 需在 Cocos Creator 属性面板绑定的组件：
  *   - cardPrefab      → CardItem 挂载的 Prefab 资源
  *   - scrollView      → 背包界面的 ScrollView 组件
  *   - contentNode     → ScrollView 的 content 节点
@@ -58,6 +59,7 @@ export class BagUI extends Component {
     private _currentMode: string = 'STUDY_MODE';
     private _cardItems: CardItem[] = [];
     private _cardService: PlayerDataService | null = null;
+    private _selectedCardIds: string[] = [];
 
     // ======================== 数据服务访问器 ========================
 
@@ -68,34 +70,34 @@ export class BagUI extends Component {
         return this._cardService;
     }
 
-    /**
-     * 允许外部注入已存在的 PlayerDataService 实例
-     */
     public setCardService(service: PlayerDataService): void {
         this._cardService = service;
     }
 
-    // ======================== 生命周期方法 ========================
+    // ======================== 选中卡牌查询接口 ========================
 
     /**
-     * start —— 组件启动时自动调用
+     * getSelectedCardIds —— 返回当前答题模式下被选中的卡牌 ID 列表
+     *
+     * 外部系统（大地图、占卜答题管理器）应通过此方法查询背包选中状态，
+     * 不要直接穿透内部数组。
      */
+    public getSelectedCardIds(): string[] {
+        return [...this._selectedCardIds];
+    }
+
+    // ======================== 生命周期方法 ========================
+
     public start(): void {
         console.log('[BagUI] 背包界面初始化开始');
 
-        // 确保 PlayerDataService 已注入
         if (!this._cardService) {
-            console.warn('[BagUI] PlayerDataService 未注入，背包初始化推迟 — 请调用 setCardService() 后在适当时机手动调用 refresh()');
+            console.warn('[BagUI] PlayerDataService 未注入，背包初始化推迟');
             return;
         }
 
-        // 直接调用公共刷新方法，读取并渲染初始背包
         this.refresh();
-
-        // 绑定按钮事件
         this.bindModeButtons();
-
-        // 刷新模式指示器
         this.updateModeLabel();
 
         console.log('[BagUI] 背包界面初始化完成');
@@ -105,21 +107,12 @@ export class BagUI extends Component {
 
     /**
      * refresh —— 供外部（如 GameManager）在数据变动后手动调用，刷新背包渲染
-     *
-     * 工作流程：
-     *   1. 从 PlayerDataService 获取当前玩家拥有的卡牌 ID 列表
-     *   2. 在 oracleCards 常量表中查找匹配的 OracleCard 对象
-     *   3. 清除旧的卡牌实例
-     *   4. 直接传入 OracleCard 渲染新卡牌（CardItem 内部完成数据消费）
-     *   5. 异步加载甲骨文图片资源
      */
     public refresh(): void {
         console.log('[BagUI] 正在执行背包数据重绘...');
 
-        // 1. 从 PlayerDataService 获取最新卡牌 ID 列表
         const ownedIds: readonly string[] = this.cardService.getOwnedCardIds();
 
-        // 2. 根据 ID 在 oracleCards 常量表中查找完整数据
         const ownedCards: OracleCard[] = ownedIds
             .map(id => oracleCards.find(card => card.id === id))
             .filter((card): card is OracleCard => card !== undefined);
@@ -129,21 +122,13 @@ export class BagUI extends Component {
             console.warn('[BagUI] 以下卡牌 ID 在 oracleCards 中未找到，已跳过渲染：' + missing.join(', '));
         }
 
-        // 3. 清除旧卡牌
         this.clearAllCards();
-
-        // 4. 渲染新卡牌（直接传入 OracleCard，由 CardItem 内部完成数据填充与模式显隐）
+        this._selectedCardIds = [];
         this.renderCards(ownedCards);
     }
 
     // ======================== 异步图片加载 ========================
 
-    /**
-     * 异步加载卡牌甲骨文图片资源并应用到对应的 CardItem
-     *
-     * @param cardItem - 目标 CardItem 实例
-     * @param card     - 包含 oracleImagePath 的 OracleCard 数据
-     */
     private loadCardSprites(cardItem: CardItem, card: OracleCard): void {
         const { oracleImagePath } = card;
 
@@ -180,7 +165,11 @@ export class BagUI extends Component {
             cardItem.init(card.id, card, this._currentMode);
             this._cardItems.push(cardItem);
 
-            // 触发异步图片加载
+            // 监听卡牌选中事件
+            cardNode.on('card-selected', (data: { cardId: string; isSelected: boolean }) => {
+                this.onCardSelected(data.cardId, data.isSelected);
+            });
+
             this.loadCardSprites(cardItem, card);
 
             cardNode.parent = this.contentNode;
@@ -197,10 +186,31 @@ export class BagUI extends Component {
         console.log('[BagUI] 共渲染 ' + cards.length + ' 张卡牌');
     }
 
-    private clearAllCards(): void {
-        if (!this.contentNode) {
-            return;
+    // ======================== 选中状态管理 ========================
+
+    /**
+     * onCardSelected —— 卡牌选中事件回调
+     *
+     * 答题模式下实行单选：新的卡牌被选中时，取消其他所有卡牌的选中状态。
+     */
+    private onCardSelected(cardId: string, isSelected: boolean): void {
+        if (isSelected) {
+            // 单选管理：取消其他卡牌的选中
+            for (const item of this._cardItems) {
+                if (item.getCardId() !== cardId) {
+                    item.setSelected(false);
+                }
+            }
+            this._selectedCardIds = [cardId];
+        } else {
+            this._selectedCardIds = [];
         }
+
+        console.log('[BagUI] 当前选中卡牌: ' + (this._selectedCardIds.join(', ') || '无'));
+    }
+
+    private clearAllCards(): void {
+        if (!this.contentNode) return;
         const children: Node[] = this.contentNode.children;
         for (let i = children.length - 1; i >= 0; i--) {
             children[i].destroy();
@@ -222,6 +232,7 @@ export class BagUI extends Component {
     private switchToStudyMode(): void {
         if (this._currentMode === 'STUDY_MODE') return;
         this._currentMode = 'STUDY_MODE';
+        this._selectedCardIds = [];
         this.applyModeToAllCards();
         this.updateModeLabel();
     }
@@ -262,6 +273,7 @@ export class BagUI extends Component {
             this.examModeBtn.off(Node.EventType.TOUCH_END, this.switchToExamMode, this);
         }
         this._cardItems = [];
+        this._selectedCardIds = [];
         this._cardService = null;
     }
 }

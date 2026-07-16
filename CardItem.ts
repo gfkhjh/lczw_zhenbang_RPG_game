@@ -1,12 +1,12 @@
 ﻿/**
- * CardItem —— 单张卡牌组件（双模式视觉状态机）
+ * CardItem —— 单张卡牌组件（双模式视觉状态机 + 点击交互）
  *
  * 挂载在卡牌 Prefab 的根节点上，通过 init() 接收卡牌数据，
  * 通过 setMode() 在图鉴学习模式与占卜答题模式之间切换。
  *
  * ▸ STUDY_MODE（图鉴学习）：显示汉字、拼音、释义，隐藏遮罩层
- * ▸ EXAM_MODE （占卜答题）：隐藏所有文字 Label，激活遮罩层，
- *                           仅保留甲骨图案与品质发光特效
+ * ▸ EXAM_MODE （占卜答题）：隐藏文字，激活遮罩，支持点击选中，
+ *                           选中时 Scale 1.05 并派发自定义事件
  */
 
 import { _decorator, Component, Node, Label, Sprite, SpriteFrame, Color } from 'cc';
@@ -88,6 +88,7 @@ export class CardItem extends Component {
     private _cardId: string = '';
     private _cardData: OracleCard | null = null;
     private _currentMode: string = 'STUDY_MODE';
+    private isSelected: boolean = false;
 
     // ======================== 公开接口 ========================
 
@@ -102,24 +103,58 @@ export class CardItem extends Component {
         this._cardId = cardId;
         this._cardData = data;
         this._currentMode = mode;
+        this.isSelected = false;
 
         this.applyTextInfo(data);
         this.applyQualityEffect(data);
         this.applyModeVisibility(mode);
+        this.updateSelectedVisual();
+
+        // 注册点击事件
+        this.node.on(Node.EventType.TOUCH_END, this.onCardTapped, this);
 
         console.log(`[CardItem] 卡牌「${data.modernChar}」初始化完成，品质：${QUALITY_NAMES[rarityToQuality(data.rarity)]}，模式：${mode === 'STUDY_MODE' ? '图鉴学习' : '占卜答题'}`);
     }
 
     /**
-     * setMode —— 切换卡牌展示模式（仅切换显隐，不含动画）
+     * setMode —— 切换卡牌展示模式
      *
      * @param mode - 'STUDY_MODE' | 'EXAM_MODE'
      */
     public setMode(mode: string): void {
         if (this._currentMode === mode) return;
         this._currentMode = mode;
+
+        // 切到图鉴学习模式时必须重置选中状态
+        if (mode === 'STUDY_MODE') {
+            this.isSelected = false;
+            this.updateSelectedVisual();
+        }
+
         this.applyModeVisibility(mode);
         console.log(`[CardItem] 模式切换为 ${mode === 'STUDY_MODE' ? '图鉴学习' : '占卜答题'}`);
+    }
+
+    /** 返回当前卡牌 ID */
+    public getCardId(): string {
+        return this._cardId;
+    }
+
+    /**
+     * setSelected —— 被动设置选中状态
+     *
+     * 由 BagUI 在单选管理时调用，用于取消其他卡牌的选中状态。
+     */
+    public setSelected(selected: boolean): void {
+        this.isSelected = selected;
+        this.updateSelectedVisual();
+    }
+
+    /** 设置甲骨文图案 SpriteFrame（由 BagUI 异步加载后调用） */
+    public setOracleSprite(spriteFrame: SpriteFrame): void {
+        if (this.sprOracle) {
+            this.sprOracle.spriteFrame = spriteFrame;
+        }
     }
 
     // ======================== 私有方法 ========================
@@ -138,9 +173,6 @@ export class CardItem extends Component {
 
     /**
      * applyModeVisibility —— 瞬时切换显隐，无过渡动画
-     *
-     * STUDY_MODE：显示文字 Label，隐藏遮罩
-     * EXAM_MODE ：隐藏文字 Label，激活遮罩
      */
     private applyModeVisibility(mode: string): void {
         const isStudy = (mode === 'STUDY_MODE');
@@ -151,18 +183,42 @@ export class CardItem extends Component {
         if (this.maskLayer)      { this.maskLayer.active = !isStudy; }
     }
 
-    // ======================== 异步图片更新接口 ========================
+    // ======================== 选中状态与点击事件 ========================
 
-    /** 设置甲骨文图案 SpriteFrame（由 BagUI 异步加载后调用） */
-    public setOracleSprite(spriteFrame: SpriteFrame): void {
-        if (this.sprOracle) {
-            this.sprOracle.spriteFrame = spriteFrame;
+    /** 更新选中状态的视觉反馈：选中 Scale 1.05，取消则恢复 1.0 */
+    private updateSelectedVisual(): void {
+        if (this.isSelected) {
+            this.node.setScale(1.05, 1.05, 1);
+        } else {
+            this.node.setScale(1, 1, 1);
         }
+    }
+
+    /** 点击回调 — 按模式分流 */
+    private onCardTapped(): void {
+        if (this._currentMode === 'STUDY_MODE') {
+            // STUDY_MODE：仅触发点击音效占位，不做状态变更
+            console.log(`[CardItem] 卡牌「${this._cardId}」点击（图鉴学习模式）`);
+            return;
+        }
+
+        // EXAM_MODE：切换选中状态
+        this.isSelected = !this.isSelected;
+        this.updateSelectedVisual();
+
+                console.log(`[CardItem] 卡牌「${this._cardId}」选中状态变更: isSelected=${this.isSelected}`);
+
+        // 向父节点派发自定义事件
+        this.node.emit('card-selected', {
+            cardId: this._cardId,
+            isSelected: this.isSelected,
+        });
     }
 
     // ======================== 生命周期 ========================
 
     public onDestroy(): void {
+        this.node.off(Node.EventType.TOUCH_END, this.onCardTapped, this);
         this._cardData = null;
         console.log('[CardItem] 卡牌组件销毁');
     }
