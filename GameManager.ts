@@ -5,11 +5,12 @@
  * - 游戏初始化与数据校验
  * - 驱动核心玩法测试流程（模拟玩家操作）
  *
- * 通过 BagUI 暴露的 PlayerDataService 访问新核心数据层。
+ * 在 start 中先创建 PlayerDataService，注入 BagUI 后再进行后续操作。
  */
 
 import { _decorator, Component, CCBoolean } from 'cc';
 import { BagUI } from './BagUI';
+import { CocosSaveStorage } from './core/cocos-storage';
 import { PlayerDataService } from './core/PlayerDataService';
 import { questions } from './core/data';
 
@@ -26,20 +27,35 @@ export class GameManager extends Component {
     @property({ type: BagUI, displayName: '背包界面组件' })
     public bagUI: BagUI | null = null;
 
+    // ========================== 运行时服务引用 ==========================
+
+    private _service: PlayerDataService | null = null;
+
     // ========================== 生命周期方法 ==========================
 
-    public start(): void {
-        console.log('========== 游戏初始化开始 ==========');
-
+    public onLoad(): void {
         if (!this.bagUI) {
             console.error('[GameManager] 未绑定 BagUI，已停止初始化。请在属性面板中绑定背包界面组件。');
             return;
         }
 
-        // 获取共享的 PlayerDataService 实例（由 BagUI 懒初始化）
-        const service: PlayerDataService = this.bagUI.cardService;
-        const profile = service.profile;
+        // 在所有组件进入 start 前完成服务注入，避免受组件启动顺序影响。
+        const service = PlayerDataService.load(new CocosSaveStorage());
+        this._service = service;
+        this.bagUI.setCardService(service);
+        console.log('[GameManager] PlayerDataService 已注入 BagUI');
+    }
 
+    public start(): void {
+        console.log('========== 游戏初始化开始 ==========');
+
+        const service = this._service;
+        if (!service || !this.bagUI) {
+            console.error('[GameManager] 初始化未完成，无法启动游戏流程');
+            return;
+        }
+
+        const profile = service.profile;
         console.log('[GameManager] 初始墨料: ' + profile.ink);
         if (profile.ownedCardIds.length === 0) {
             console.log('[GameManager] 初始已拥有卡牌: 空');
@@ -48,7 +64,7 @@ export class GameManager extends Component {
         }
         console.log('====================================\n');
 
-        // 调试模式：自动运行模拟流程并刷新背包 UI（发布时关闭 debugSimulate 即可）
+        // 调试模式：自动运行模拟流程并刷新背包 UI。
         if (this.debugSimulate) {
             this.simulateGameLoop();
 
@@ -67,12 +83,11 @@ export class GameManager extends Component {
     public simulateGameLoop(): void {
         console.log('<><><><><> 核心玩法模拟测试开始 <><><><><>\n');
 
-        if (!this.bagUI) {
-            console.error('[GameManager] 未绑定 BagUI，无法运行模拟流程');
+        const service = this._service;
+        if (!service) {
+            console.error('[GameManager] PlayerDataService 未初始化，无法运行模拟流程');
             return;
         }
-
-        const service: PlayerDataService = this.bagUI.cardService;
 
         // ----------------------------------------
         // 步骤 A: 野外旧字答对，获得墨料

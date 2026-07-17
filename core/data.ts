@@ -1,4 +1,4 @@
-import type { OracleCard, Question } from './models.ts';
+﻿import type { OracleCard, Question } from './models.ts';
 
 export const oracleCards: readonly OracleCard[] = [
     {
@@ -14,6 +14,13 @@ export const oracleCards: readonly OracleCard[] = [
         evolutionDescription: '由弯月轮廓逐渐演变为“月”。',
         oracleImagePath: 'oracle/moon.png', evolutionImagePaths: [],
         curriculumPoints: ['象形字', '古文字字形演变'], relatedCardIds: ['OBC-001'],
+    },
+    {
+        id: 'OBC-003', modernChar: '木', rarity: 'blue', areaId: 'suburbs',
+        pronunciation: 'mù', originalMeaning: '树木', modernMeaning: '树木、木头',
+        evolutionDescription: '形如一棵树，上有向外伸展的枝桠，下有扎根泥土的根系，逐渐演变为“木”。',
+        oracleImagePath: 'oracle/wood.png', evolutionImagePaths: [],
+        curriculumPoints: ['象形字', '古文字字形演变'], relatedCardIds: [],
     },
 ];
 
@@ -41,5 +48,17 @@ export const questions: readonly Question[] = [
         relatedCardIds: ['OBC-002'], difficulty: 2,
         stem: '选择表示月亮的甲骨卡片。', correctAnswer: 'OBC-002',
         explanation: '“月”的本义是月亮。', inkCost: 20, coinReward: 10, expReward: 10,
+    },
+    {
+        id: 'Q-FIELD-WOOD-001', type: 'choice', subject: 'chinese', scene: 'field',
+        relatedCardIds: ['OBC-003'], difficulty: 1,
+        stem: '“木”字的甲骨文字形看起来像什么？', options: ['一棵树', '一块物块', '一把斧头', '一朵花'],
+        correctAnswer: '一棵树', explanation: '“木”是典型的象形字，甲骨文的字形就像一棵有枝有根的树木。', inkReward: 20,
+    },
+    {
+        id: 'Q-DIV-WOOD-001', type: 'oracle-drag', subject: 'history', scene: 'divination',
+        relatedCardIds: ['OBC-003'], difficulty: 2,
+        stem: '选择表示“树木”的甲骨文卡片。', correctAnswer: 'OBC-003',
+        explanation: '甲骨文中的“木”本义即为树木。', inkCost: 20, coinReward: 10, expReward: 10,
     },
 ];

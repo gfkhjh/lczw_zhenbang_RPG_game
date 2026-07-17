@@ -1,4 +1,4 @@
-import type { AnswerResult, PlayerProfile, Question } from './models.ts';
+﻿import type { AnswerResult, PlayerProfile, Question } from './models.ts';
 import { rankForExp } from './RankService.ts';
 import type { SaveStorage } from './storage.ts';
 
@@ -55,6 +55,25 @@ export class PlayerDataService {
         this.profile.ownedCardIds.push(cardId);
         this.save();
         return true;
+    }
+
+    /**
+     * getOwnedCardIds —— 获取玩家当前拥有的所有卡牌 ID 列表（只读）
+     *
+     * 外部系统（场景模块、占卜考核系统）应通过此方法查询背包数据，
+     * 不要直接穿透 profile.ownedCardIds。
+     */
+    public getOwnedCardIds(): readonly string[] {
+        return this.profile.ownedCardIds;
+    }
+
+    /**
+     * hasCard —— 查询某张卡牌是否已被拥有
+     *
+     * @param cardId - 卡牌唯一标识符（如 "OBC-001"）
+     */
+    public hasCard(cardId: string): boolean {
+        return this.profile.ownedCardIds.includes(cardId);
     }
 
     public answer(question: Question, answer: string, answeredAt = Date.now()): AnswerResult {
