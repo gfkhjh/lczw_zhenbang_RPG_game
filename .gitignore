@@ -1,0 +1,34 @@
+
+#///////////////////////////
+# Cocos Creator 3D Project
+#///////////////////////////
+library/
+temp/
+local/
+build/
+profiles/
+native
+
+# Local/third-party editor tooling
+extensions/cocos-mcp-server/
+
+# Packaged Android outputs and signing material
+*.apk
+*.aab
+*.keystore
+*.jks
+*.p12
+#//////////////////////////
+# NPM
+#//////////////////////////
+node_modules/
+
+#//////////////////////////
+# VSCode
+#//////////////////////////
+.vscode/
+
+#//////////////////////////
+# WebStorm
+#//////////////////////////
+.idea/
